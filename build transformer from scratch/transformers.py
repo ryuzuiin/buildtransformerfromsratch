@@ -211,3 +211,70 @@ class CrossAttention(nn.Module):
 
         return output
     
+class FeedForward(nn.Module):
+    def __init__(self, hidden_size: int, expand_size: int, dropout: float = 0.1, bias: bool = True):
+        super().__init__()
+        # Project input to expanded dimension
+        self.input_projection = nn.Linear(hidden_size, expand_size, bias=bias)
+        # Activation function to introduce non-linearity
+        self.activation = nn.GELU()
+        # Project back to the input dimension
+        self.output_projection = nn.Linear(expand_size, hidden_size, bias=bias)
+        # Optional dropout layer to prevent overfitting
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Apply input projection
+        output = self.input_projection(x)
+        # Apply activation function
+        output = self.activation(output)
+        # Apply output projection
+        output = self.output_projection(output)
+        # Optionally apply dropout layer
+        output = self.dropout(output)
+        return output
+    
+class TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        context_size: int,
+        expand_size: int,
+        attention: nn.Module = CausalAttention,
+        dropout: float = 0.1,
+        bias: bool = True,
+    ):
+        super().__init__()
+        # Layer normalization before attention
+        self.attn_norm = nn.LayerNorm(hidden_size)
+        # Attention layer
+        self.attn = attention(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            context_size=context_size,
+            dropout=dropout,
+            bias=bias,
+        )
+        # Layer normalization before feed-forward, pre-norm
+        self.ffn_norm = nn.LayerNorm(hidden_size)
+        # Feed-forward layer
+        self.ffn = FeedForward(
+            hidden_size=hidden_size,
+            expand_size=expand_size,
+            dropout=dropout,
+            bias=bias,
+        )
+
+    def forward(self, input: Tensor) -> Tensor:
+        # Residual connection for attention
+        attn_output = self.attn_norm(input)
+        attn_output = input + self.attn(attn_output)
+
+        # Residual connection for feed-forward
+        ffn_output = self.ffn_norm(attn_output)
+        ffn_output = attn_output + self.ffn(ffn_output)
+
+        return ffn_output
+    
+
